@@ -14,8 +14,9 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, simpledialog
 import tkinter.font as tkfont
-from material_database import MATERIALS, get_material_names, get_material_refractive_index, get_material_description, get_material_info
+from material_database import MATERIALS, get_material_names, get_material_refractive_index, get_material_description, get_material_info,load_materials_from_file
 import matplotlib
+from manager_materials import MaterialManager
 import json
 import os
 # 设置matplotlib使用中文字体
@@ -585,6 +586,10 @@ class MultilayerFilmApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
+
+        self.material_manager = MaterialManager()
+        load_materials_from_file("custom_materials.json")
+        self.material_manager = MaterialManager(self)
 
         # 设置窗口标题和大小
         self.title("多层薄膜光谱计算程序")
@@ -1529,12 +1534,38 @@ class MultilayerFilmApp(tk.Tk):
             messagebox.showerror("应用预设错误", f"应用预设时发生错误: {str(e)}")
 
     def manage_materials(self):
-        """材料库管理功能"""
-        # 这里可以添加材料库管理的具体实现
-        messagebox.showinfo("提示", "材料库管理功能尚未实现")
+        """调用 MaterialManager 的 manage_materials 方法并刷新材料"""
+        self.material_manager.manage_materials()
+        self.wait_window(self.material_manager.window)
+        
+        # 重新加载材料数据
+        load_materials_from_file("custom_materials.json")
+        
+        # 更新所有下拉框的选项
+        material_names = get_material_names()
+        try:
+            self.incident_medium_combo['values'] = material_names
+            self.substrate_combo['values'] = material_names
+            self.exit_medium_combo['values'] = material_names
+            for layer_frame in self.layer_frames + self.exit_layer_frames:
+                layer_frame.material_combo['values'] = material_names
+        except tk.TclError as e:
+            print(f"更新下拉框时出错: {e}")
+            self.recreate_combos()
+
+    def update_combobox_values(self):
+        material_names = get_material_names()
+        try:
+            # 合并所有下拉框引用
+            combos = [self.incident_medium_combo, 
+                    self.substrate_combo,
+                    *[frame.material_combo for frame in self.layer_frames]]
+            for combo in combos:
+                combo['values'] = material_names
+        except tk.TclError:
+            self.recreate_combos()
 
 
-# 在文件末尾添加以下代码
 if __name__ == "__main__":
     app = MultilayerFilmApp()
     app.mainloop()

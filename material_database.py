@@ -27,52 +27,31 @@ def resource_path(relative_path):
         # PyInstaller创建的临时文件夹中运行
         base_path = sys._MEIPASS
     except Exception:
-        base_path = os.path.abspath(".")
-
+        # Use the directory where manager.py is located
+        base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
 def load_materials_from_file(filename="custom_materials.json"):
     """从文件加载材料数据库"""
     global MATERIALS
     try:
-        # 使用 resource_path 获取文件路径
         full_path = resource_path(filename)
+        print(f"Trying to load from: {full_path}")
         if os.path.exists(full_path):
             with open(full_path, 'r', encoding='utf-8') as f:
                 materials_data = json.load(f)
-                # 保持基础材料不变
                 MATERIALS = BASE_MATERIALS.copy()
-                # 添加自定义材料
                 MATERIALS.update(materials_data)
+            print(f"Successfully loaded: {full_path}")
+            print(f"Loaded materials: {list(MATERIALS.keys())}")  # 打印加载的材料名称
+        else:
+            print(f"File not found: {full_path}")
+            MATERIALS = BASE_MATERIALS.copy()
     except Exception as e:
         print(f"加载材料数据库时出错: {e}")
+        MATERIALS = BASE_MATERIALS.copy()
 
-def save_materials_to_file(filename="custom_materials.json"):
-    """保存材料数据库到文件（不保存基础材料）"""
-    try:
-        # 将材料数据转换为可序列化的格式，排除基础材料
-        materials_data = {}
-        for name, material in MATERIALS.items():
-            if name not in BASE_MATERIALS:  # 不保存基础材料
-                if material['data'] == 'table':
-                    materials_data[name] = {
-                        'description': material['description'],
-                        'data': material['data'],
-                        'values': {
-                            'wavelength': material['values']['wavelength'],
-                            'n': material['values']['n'],
-                            'k': material['values']['k']
-                        }
-                    }
-        
-        # 保存到文件
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(materials_data, f, ensure_ascii=False, indent=4)
-            
-    except Exception as e:
-        print(f"保存材料数据库时出错: {e}")
 
-# 其他函数保持不变
 def get_material_names():
     """返回所有材料名称列表"""
     return list(MATERIALS.keys())
