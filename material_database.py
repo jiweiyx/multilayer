@@ -7,6 +7,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 import json
 import os
+import sys
 
 # 基础材料数据（这些材料始终存在，不会被覆盖）
 BASE_MATERIALS = {
@@ -20,12 +21,24 @@ BASE_MATERIALS = {
 # 初始化材料数据库
 MATERIALS = BASE_MATERIALS.copy()
 
+def resource_path(relative_path):
+    """获取数据文件的绝对路径"""
+    try:
+        # PyInstaller创建的临时文件夹中运行
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 def load_materials_from_file(filename="custom_materials.json"):
     """从文件加载材料数据库"""
     global MATERIALS
     try:
-        if os.path.exists(filename):
-            with open(filename, 'r', encoding='utf-8') as f:
+        # 使用 resource_path 获取文件路径
+        full_path = resource_path(filename)
+        if os.path.exists(full_path):
+            with open(full_path, 'r', encoding='utf-8') as f:
                 materials_data = json.load(f)
                 # 保持基础材料不变
                 MATERIALS = BASE_MATERIALS.copy()
