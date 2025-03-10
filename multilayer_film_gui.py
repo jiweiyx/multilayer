@@ -406,14 +406,111 @@ class PlotWindow(tk.Toplevel):
 
         # 将图形嵌入窗口
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.canvas_widget = self.canvas.get_tk_widget()
+        self.canvas_widget.pack(fill=tk.BOTH, expand=True)
 
         # 添加工具栏
         self.toolbar = NavigationToolbar2Tk(self.canvas, self)
         self.toolbar.update()
-
+        
+        # 创建固定在左上角的文本框用于显示数据
+        self.info_text = self.fig.text(0.02, 0.98, '', 
+                                      transform=self.fig.transFigure,
+                                      verticalalignment='top',
+                                      bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.7),
+                                      fontsize=10)
+        self.info_text.set_visible(False)
+        
+        # 添加垂直线用于标记当前鼠标位置
+        self.vline = None
+        
+        # 存储曲线数据
+        self.line_data = []
+        
+        # 使用Tkinter的事件绑定
+        self.canvas_widget.bind("<Motion>", self.on_mouse_move_tk)
+        
         # 设置关闭窗口的行为
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        
+    def on_mouse_move_tk(self, event):
+        """处理Tkinter的鼠标移动事件"""
+        # 将Tkinter坐标转换为Matplotlib坐标
+        x, y = event.x, event.y
+        
+        # 转换为数据坐标
+        try:
+            # 获取图表区域的边界
+            bbox = self.ax.get_position()
+            canvas_width = self.canvas_widget.winfo_width()
+            canvas_height = self.canvas_widget.winfo_height()
+            
+            # 检查鼠标是否在图表区域内
+            ax_x0 = bbox.x0 * canvas_width
+            ax_y0 = bbox.y0 * canvas_height
+            ax_x1 = bbox.x1 * canvas_width
+            ax_y1 = bbox.y1 * canvas_height
+            
+            if not (ax_x0 <= x <= ax_x1 and ax_y0 <= y <= ax_y1):
+                # 鼠标不在图表区域内
+                self.info_text.set_visible(False)
+                if self.vline:
+                    self.vline.set_visible(False)
+                self.canvas.draw_idle()
+                return
+            
+            # 计算相对位置
+            rel_x = (x - ax_x0) / (ax_x1 - ax_x0)
+            rel_y = 1.0 - (y - ax_y0) / (ax_y1 - ax_y0)  # 反转Y轴
+            
+            # 转换为数据坐标
+            x_min, x_max = self.ax.get_xlim()
+            y_min, y_max = self.ax.get_ylim()
+            
+            data_x = x_min + rel_x * (x_max - x_min)
+            data_y = y_min + rel_y * (y_max - y_min)
+            
+            # 更新或创建垂直线
+            if self.vline is None:
+                self.vline = self.ax.axvline(data_x, color='gray', linestyle='--', alpha=0.5)
+            else:
+                # 正确设置垂直线位置 - 使用列表
+                self.vline.set_xdata([data_x, data_x])
+                self.vline.set_visible(True)
+            
+            # 显示所有曲线在当前波长的反射率
+            self.show_all_reflectance_at_wavelength(data_x)
+            
+        except Exception as e:
+            print(f"坐标转换错误: {e}")
+            self.info_text.set_visible(False)
+            if self.vline:
+                self.vline.set_visible(False)
+            self.canvas.draw_idle()
+
+    def show_all_reflectance_at_wavelength(self, x_mouse):
+        """显示所有曲线在指定波长处的反射率值"""
+        if not self.line_data:
+            return
+            
+        info_text = f"波长: {x_mouse:.1f} nm\n"
+        
+        # 对于每条曲线，找到最接近的波长点
+        for wavelengths, reflectance, label in self.line_data:
+            # 找到最接近的波长索引
+            idx = min(range(len(wavelengths)), key=lambda i: abs(wavelengths[i] - x_mouse))
+            wavelength = wavelengths[idx]
+            r_value = reflectance[idx] * 100  # 转换为百分比
+            
+            # 添加到显示文本
+            info_text += f"{label}: {r_value:.2f}%\n"
+        
+        # 更新文本框内容
+        self.info_text.set_text(info_text)
+        self.info_text.set_visible(True)
+        
+        # 重绘画布
+        self.canvas.draw_idle()
 
     def on_close(self):
         """关闭窗口时的行为"""
@@ -427,6 +524,16 @@ class PlotWindow(tk.Toplevel):
         self.ax.set_title('反射率光谱')
         self.ax.grid(True)
         self.fig.tight_layout()
+        
+        # 重置垂直线
+        self.vline = None
+        
+        # 清空曲线数据
+        self.line_data = []
+        
+        # 隐藏信息文本
+        self.info_text.set_visible(False)
+        
         self.canvas.draw()
 
     def plot_spectrum(self, wavelengths, reflectance, polarization, angle):
@@ -446,6 +553,9 @@ class PlotWindow(tk.Toplevel):
             linestyle=linestyle,
             linewidth=2,
             label=f'{polarization}偏振 {angle}°')
+            
+        # 存储曲线数据用于鼠标交互
+        self.line_data.append((wavelengths, reflectance, f'{polarization}偏振 {angle}°'))
 
         self.ax.set_xlabel('波长 (nm)')
         self.ax.set_ylabel('反射率 (%)')
